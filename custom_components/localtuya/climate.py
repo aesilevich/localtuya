@@ -17,6 +17,7 @@ from homeassistant.components.climate.const import (
     PRESET_ECO,
     PRESET_HOME,
     PRESET_NONE,
+    PRESET_BOOST,
     ClimateEntityFeature,
     FAN_AUTO,
     FAN_LOW,
@@ -133,6 +134,15 @@ PRESET_SETS = {
         PRESET_AWAY: "Holiday",
         PRESET_HOME: "Program",
         PRESET_NONE: "Manual",
+    },
+    "high/low/empty": {
+        PRESET_BOOST: "high",
+        PRESET_NONE: "low",
+        PRESET_AWAY: "empty",
+    },
+    "High/Low": {
+        PRESET_BOOST: "High",
+        PRESET_NONE: "Low",
     },
 }
 
