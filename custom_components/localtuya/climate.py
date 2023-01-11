@@ -28,6 +28,8 @@ from homeassistant.components.climate.const import (
 from homeassistant.const import (
     ATTR_TEMPERATURE,
     CONF_TEMPERATURE_UNIT,
+    CONF_ID,
+    CONF_FRIENDLY_NAME,
     PRECISION_HALVES,
     PRECISION_TENTHS,
     PRECISION_WHOLE,
@@ -35,7 +37,7 @@ from homeassistant.const import (
     TEMP_FAHRENHEIT,
 )
 
-from .common import LocalTuyaEntity, async_setup_entry
+from .common import LocalTuyaEntity, async_setup_entry, get_device_for_config
 from .const import (
     CONF_CURRENT_TEMPERATURE_DP,
     CONF_ECO_DP,
@@ -54,6 +56,11 @@ from .const import (
     CONF_TARGET_TEMPERATURE_DP,
     CONF_TEMPERATURE_STEP,
 )
+
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.core import HomeAssistant
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -124,6 +131,36 @@ DEFAULT_PRECISION = PRECISION_TENTHS
 DEFAULT_TEMPERATURE_STEP = PRECISION_HALVES
 # Empirically tested to work for AVATTO thermostat
 MODE_WAIT = 0.1
+
+CONFIG_SCHEMA = vol.Schema({
+    vol.Required(CONF_ID): int,
+    vol.Required(CONF_FRIENDLY_NAME): str,
+    vol.Optional(CONF_TARGET_TEMPERATURE_DP): int,
+    vol.Optional(CONF_CURRENT_TEMPERATURE_DP): int,
+    vol.Optional(CONF_TEMPERATURE_STEP): vol.In(
+        [PRECISION_WHOLE, PRECISION_HALVES, PRECISION_TENTHS]
+    ),
+    vol.Optional(CONF_MAX_TEMP_DP): int,
+    vol.Optional(CONF_MIN_TEMP_DP): int,
+    vol.Optional(CONF_PRECISION): vol.In(
+        [PRECISION_WHOLE, PRECISION_HALVES, PRECISION_TENTHS]
+    ),
+    vol.Optional(CONF_HVAC_MODE_DP): int,
+    vol.Optional(CONF_HVAC_MODE_SET): vol.In(list(HVAC_MODE_SETS.keys())),
+    vol.Optional(CONF_HVAC_ACTION_DP): int,
+    vol.Optional(CONF_HVAC_ACTION_SET): vol.In(list(HVAC_ACTION_SETS.keys())),
+    vol.Optional(CONF_ECO_DP): int,
+    vol.Optional(CONF_ECO_VALUE): str,
+    vol.Optional(CONF_PRESET_DP): int,
+    vol.Optional(CONF_PRESET_SET): vol.In(list(PRESET_SETS.keys())),
+    vol.Optional(CONF_TEMPERATURE_UNIT): vol.In(
+        [TEMPERATURE_CELSIUS, TEMPERATURE_FAHRENHEIT]
+    ),
+    vol.Optional(CONF_TARGET_PRECISION): vol.In(
+        [PRECISION_WHOLE, PRECISION_HALVES, PRECISION_TENTHS]
+    ),
+    vol.Optional(CONF_HEURISTIC_ACTION): bool,
+})
 
 
 def flow_schema(dps):
@@ -410,3 +447,29 @@ class LocaltuyaClimate(LocalTuyaEntity, ClimateEntity):
 
 
 async_setup_entry = partial(async_setup_entry, DOMAIN, LocaltuyaClimate, flow_schema)
+
+
+# Setting up localtuya climate from configuration file
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Set up the localtuya climate platform."""
+    _LOGGER.debug("CLIMATE async_setup_platform: %s", str(config))
+
+    # getting device for config entry
+    device = await get_device_for_config(hass, config["device"])
+    _LOGGER.debug("CLIMATE async_setup_platform DEVICE: %s", str(device))
+
+    # creating climate entity
+    entity = LocaltuyaClimate(device, config, config["id"])
+
+    # adding entity into device
+    device.add_entities([entity])
+
+    # adding climate entity to home assistant
+    async_add_entities([entity])
+
+    _LOGGER.debug("CLIMATE async_setup_platform END")

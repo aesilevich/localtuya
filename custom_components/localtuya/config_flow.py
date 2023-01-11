@@ -661,10 +661,10 @@ class LocalTuyaOptionsFlowHandler(config_entries.OptionsFlow):
         # Add a checkbox that allows bailing out from config flow if at least one
         # entity has been added
         schema = PICK_ENTITY_SCHEMA
-        if self.selected_platform is not None:
-            schema = schema.extend(
-                {vol.Required(NO_ADDITIONAL_ENTITIES, default=True): bool}
-            )
+        # if self.selected_platform is not None:
+        schema = schema.extend(
+            {vol.Required(NO_ADDITIONAL_ENTITIES, default=(self.selected_platform is not None)): bool}
+        )
 
         return self.async_show_form(step_id="pick_entity_type", data_schema=schema)
 

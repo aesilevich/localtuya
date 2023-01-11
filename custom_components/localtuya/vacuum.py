@@ -23,7 +23,7 @@ from homeassistant.components.vacuum import (
     StateVacuumEntity,
 )
 
-from .common import LocalTuyaEntity, async_setup_entry
+from .common import LocalTuyaEntity, async_setup_entry, get_device_for_config
 from .const import (
     CONF_BATTERY_DP,
     CONF_CLEAN_AREA_DP,
@@ -43,6 +43,11 @@ from .const import (
     CONF_RETURNING_STATUS_VALUE,
     CONF_STOP_STATUS,
 )
+
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.core import HomeAssistant
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -254,3 +259,23 @@ class LocaltuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
 
 
 async_setup_entry = partial(async_setup_entry, DOMAIN, LocaltuyaVacuum, flow_schema)
+
+
+# Setting up localtuya vacuum from configuration file
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Set up the localtuya vacuum platform."""
+    _LOGGER.debug("VACUUM async_setup_platform: %s", str(config))
+
+    # getting device for config entry
+    device = await get_device_for_config(hass, config["device"])
+
+    # creating vacuum entity
+    entity = LocaltuyaVacuum(device, config, config["id"])
+
+    # adding vacuum entity
+    async_add_entities([entity])

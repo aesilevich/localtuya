@@ -22,6 +22,8 @@ from homeassistant.helpers.dispatcher import (
 )
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.typing import ConfigType
+from homeassistant.core import HomeAssistant
 
 from . import pytuya
 from .const import (
@@ -130,12 +132,18 @@ def async_config_entry_by_device_id(hass, device_id):
 class TuyaDevice(pytuya.TuyaListener, pytuya.ContextualLogger):
     """Cache wrapper for pytuya.TuyaInterface."""
 
-    def __init__(self, hass, config_entry, dev_id):
+    def __init__(self, hass, config_entry, dev_config_entry, dev_id):
+        _LOGGER.debug("TuyaDevice constructor")
         """Initialize the cache."""
         super().__init__()
         self._hass = hass
         self._config_entry = config_entry
-        self._dev_config_entry = config_entry.data[CONF_DEVICES][dev_id].copy()
+
+        if dev_config_entry:
+            self._dev_config_entry = dev_config_entry.copy()
+        else:
+            self._dev_config_entry = config_entry.data[CONF_DEVICES][dev_id].copy()
+
         self._interface = None
         self._status = {}
         self.dps_to_request = {}
@@ -156,8 +164,12 @@ class TuyaDevice(pytuya.TuyaListener, pytuya.ContextualLogger):
         self.set_logger(_LOGGER, self._dev_config_entry[CONF_DEVICE_ID])
 
         # This has to be done in case the device type is type_0d
-        for entity in self._dev_config_entry[CONF_ENTITIES]:
-            self.dps_to_request[entity[CONF_ID]] = None
+        if CONF_ENTITIES in self._dev_config_entry:
+            for entity in self._dev_config_entry[CONF_ENTITIES]:
+                self.dps_to_request[entity[CONF_ID]] = None
+        
+        self.dps_to_request[1] = None
+        _LOGGER.debug("TuyaDevice DPS: %s", str(self.dps_to_request))
 
     def add_entities(self, entities):
         """Set the entities associated with this device."""
@@ -366,8 +378,14 @@ class LocalTuyaEntity(RestoreEntity, pytuya.ContextualLogger):
         """Initialize the Tuya entity."""
         super().__init__()
         self._device = device
-        self._dev_config_entry = config_entry
-        self._config = get_entity_config(config_entry, dp_id)
+
+        if "device" in config_entry:
+            self._dev_config_entry = config_entry["device"]
+            self._config = config_entry
+        else:
+            self._dev_config_entry = config_entry
+            self._config = get_entity_config(config_entry, dp_id)
+
         self._dp_id = dp_id
         self._status = {}
         self._state = None
@@ -435,9 +453,10 @@ class LocalTuyaEntity(RestoreEntity, pytuya.ContextualLogger):
 
     @property
     def device_info(self):
+        _LOGGER.debug("TUYALOCAL device_info BEGIN")
         """Return device information for the device registry."""
         model = self._dev_config_entry.get(CONF_MODEL, "Tuya generic")
-        return {
+        res = {
             "identifiers": {
                 # Serial numbers are unique identifiers within a specific domain
                 (DOMAIN, f"local_{self._dev_config_entry[CONF_DEVICE_ID]}")
@@ -447,6 +466,8 @@ class LocalTuyaEntity(RestoreEntity, pytuya.ContextualLogger):
             "model": f"{model} ({self._dev_config_entry[CONF_DEVICE_ID]})",
             "sw_version": self._dev_config_entry[CONF_PROTOCOL_VERSION],
         }
+        _LOGGER.debug("TUYALOCAL device_info END")
+        return res
 
     @property
     def name(self):
@@ -471,6 +492,7 @@ class LocalTuyaEntity(RestoreEntity, pytuya.ContextualLogger):
     @property
     def available(self):
         """Return if device is available or not."""
+        self.debug("LOCALTUYA ENTITY available: dp_id = %s, status = %s", str(self._dp_id), str(self._status))
         return str(self._dp_id) in self._status
 
     def dps(self, dp_index):
@@ -598,3 +620,31 @@ class LocalTuyaEntity(RestoreEntity, pytuya.ContextualLogger):
 
         # Manually initialise
         await self._device.set_dp(restore_state, self._dp_id)
+
+
+# Creates device for specified device section in config yaml
+async def create_device_for_config(hass: HomeAssistant, config: ConfigType):
+    _LOGGER.debug("LOCALTUYA create_device_for_config BEGIN: %s", str(config))
+    config_entries = hass.config_entries.async_entries(DOMAIN)
+    _LOGGER.debug("LOCALTUYA create_device_for_config ENTRIES: %s", str(config_entries))
+    dev_id = config["device_id"]
+    _LOGGER.debug("LOCALTUYA create_device_for_config BEFORE CREATE")
+    device = TuyaDevice(hass, config_entries, config, dev_id)
+    _LOGGER.debug("LOCALTUYA create_device_for_config CREATED: %s", str(device))
+    return device
+
+
+# Gets or creates device for specified section in config yaml
+async def get_device_for_config(hass: HomeAssistant, config: ConfigType):
+    _LOGGER.debug("LOCALTUYA get_device_for_config ENTRIES: %s", str(config))
+    _LOGGER.debug("LOCALTUYA get_device_for_config XXX 0")
+    device_id = config["device_id"]
+    _LOGGER.debug("LOCALTUYA get_device_for_config XXX 1")
+    if device_id in hass.data[DOMAIN][TUYA_DEVICES]:
+        _LOGGER.debug("LOCALTUYA get_device_for_config: device is already created: %s", str(hass.data[DOMAIN][TUYA_DEVICES][device_id]))
+        return hass.data[DOMAIN][TUYA_DEVICES][device_id]
+    else:
+        _LOGGER.debug("LOCALTUYA creating new device")
+        device = await create_device_for_config(hass, config)
+        hass.data[DOMAIN][TUYA_DEVICES][device_id] = device
+        return device

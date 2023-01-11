@@ -42,13 +42,24 @@ from .const import (
 )
 from .discovery import TuyaDiscovery
 
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.core import HomeAssistant
+
+
 _LOGGER = logging.getLogger(__name__)
 
 UNSUB_LISTENER = "unsub_listener"
 
 RECONNECT_INTERVAL = timedelta(seconds=60)
 
-CONFIG_SCHEMA = config_schema()
+CONFIG_SCHEMA = vol.Schema(
+    {
+        vol.Optional("zopa", default="aaaa"): str,
+    },
+    extra = vol.ALLOW_EXTRA,
+)
+
 
 CONF_DP = "dp"
 CONF_VALUE = "value"
@@ -65,6 +76,10 @@ SERVICE_SET_DP_SCHEMA = vol.Schema(
 
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the LocalTuya integration component."""
+
+    _LOGGER.debug("TUYALOCAL async_setup: %s", str(config))
+#    _LOGGER.debug("TUYALOCAL AAAAA: %s", str(config[DOMAIN]))
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][TUYA_DEVICES] = {}
 
@@ -238,6 +253,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             entry.version,
         )
         return
+    
+    _LOGGER.debug("LOCALTUYA async_setup_entry: %s", str(entry))
 
     region = entry.data[CONF_REGION]
     client_id = entry.data[CONF_CLIENT_ID]
@@ -266,7 +283,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             platforms = platforms.union(
                 set(entity[CONF_PLATFORM] for entity in entities)
             )
-            hass.data[DOMAIN][TUYA_DEVICES][dev_id] = TuyaDevice(hass, entry, dev_id)
+
+            _LOGGER.debug("LOCALTUYA async_setup_entry CREATE DEVICE")
+            hass.data[DOMAIN][TUYA_DEVICES][dev_id] = TuyaDevice(hass, entry, None, dev_id)
 
         await asyncio.gather(
             *[
@@ -375,3 +394,13 @@ async def async_remove_orphan_entities(hass, entry):
 
     for entity_id in entities.values():
         ent_reg.async_remove(entity_id)
+
+
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    _LOGGER.debug("LOCALTUYA async_setup_platform: %s", str(config))
+    """Set up the localtuya platform."""
